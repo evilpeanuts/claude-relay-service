@@ -1,0 +1,108 @@
+# Workflow 的名称，会显示在 GitHub Actions 页面
+name: 🔄 Sync Upstream (Rebase Clean)
+
+# 定义何时触发这个 workflow
+on:
+  schedule:
+    # 每天 UTC 2:00 运行 = 北京时间次日 10:00
+    - cron: "0 2 * * *"
+  
+  # 允许在 GitHub Actions 页面手动点击按钮触发
+  workflow_dispatch:
+
+# 权限设置：给予这个 workflow 写入仓库内容的权限
+#permissions:
+#  contents: write  # 允许推送代码到仓库
+
+# 定义要执行的任务
+jobs:
+  # 任务名称为 "sync"
+  sync:
+    # 指定运行环境：使用最新版本的 Ubuntu Linux
+    runs-on: ubuntu-latest
+
+    # 定义这个任务的执行步骤
+    steps:
+      # ========== 步骤 1：检出你的仓库代码 ==========
+      - name: 🧩 Checkout your repository
+        # 使用 GitHub 官方提供的 checkout action
+        uses: actions/checkout@v4
+        with:
+          # 使用 ${{ secrets.GITHUB_TOKEN }} 进行认证， 如果权限不足 使用 ${{ secrets.SYNC_TOKEN }} 同时删除 permissions: contents: write 
+          token: ${{ secrets.SYNC_TOKEN }}
+          
+          # 获取完整的 Git 历史记录
+          fetch-depth: 0
+
+      # ========== 步骤 2：配置 Git 用户信息 ==========
+      - name: 🧱 Configure Git
+        run: |
+          # 设置 Git 提交时使用的用户名
+          git config user.name "github-actions[bot]"
+          
+          # 设置 Git 提交时使用的邮箱
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # ========== 步骤 3：添加上游仓库并获取最新代码 ==========
+      - name: 🔗 Add upstream remote
+        run: |
+          # 添加上游仓库（使用 HTTPS 地址，而不是 SSH）
+          git remote add upstream https://github.com/Wei-Shaw/claude-relay-service.git
+          
+          # 从上游仓库获取所有分支和提交记录
+          git fetch upstream
+
+      # ========== 步骤 4：使用 rebase 方式同步主分支 ==========
+      - name: 🔄 Rebase main with upstream/main
+        run: |
+          # 切换到 main 分支
+          git checkout main
+          
+          # 输出提示信息
+          echo "Fetching and rebasing from upstream/main..."
+          
+          # 执行 rebase 操作
+          # 时自动把冲突文件全部用 theirs 并继续（不中断 workflow）
+          git rebase upstream/main  -X theirs || (
+            echo "⚠️ Rebase conflict, aborting."
+            git rebase --abort
+            exit 0
+          )
+
+      # ========== 步骤 5：强制推送更新后的 main 分支 ==========
+      - name: 🚀 Push rebased main back to origin
+        run: |
+          # 推送 main 分支到远程仓库
+          # --force-with-lease：安全的强制推送
+          git push origin main --force-with-lease
+
+      # ========== 步骤 6：更新你的 CustomProduction 开发分支 ==========
+      - name: 🧬 Update CustomProduction branch from main
+        # 只有当前面所有步骤都成功时才执行
+        if: ${{ success() }}
+        run: |
+          # 尝试从远程获取 CustomProduction 分支
+          # 如果不存在则创建它
+          git fetch origin CustomProduction || git branch CustomProduction
+          
+          # 切换到 CustomProduction 分支
+          git checkout CustomProduction
+          
+          # 将 CustomProduction 分支 rebase 到最新的 main 分支上
+          # 这样你的自定义功能会建立在最新的上游代码之上
+          git rebase origin/main || (
+            echo "⚠️ Conflict detected on CustomProduction, skipping."
+            git rebase --abort
+            exit 0
+          )
+          
+          # 推送更新后的 CustomProduction 分支
+          git push origin CustomProduction --force-with-lease
+
+      # ========== 步骤 7：输出同步摘要 ==========
+      - name: 📊 Sync summary
+        if: ${{ success() }}
+        run: |
+          echo "✅ Successfully synced with upstream repository"
+          echo "📊 Latest commits from upstream:"
+          git log --oneline -5 upstream/main
