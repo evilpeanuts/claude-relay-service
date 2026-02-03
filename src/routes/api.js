@@ -7,6 +7,7 @@ const bedrockAccountService = require('../services/account/bedrockAccountService
 const unifiedClaudeScheduler = require('../services/scheduler/unifiedClaudeScheduler')
 const apiKeyService = require('../services/apiKeyService')
 const { authenticateApiKey } = require('../middleware/auth')
+const { translateMiddleware } = require('../middleware/translateMiddleware')
 const logger = require('../utils/logger')
 const { getEffectiveModel, parseVendorPrefixedModel } = require('../utils/modelHelper')
 const sessionHelper = require('../utils/sessionHelper')
@@ -451,6 +452,11 @@ async function handleMessagesRequest(req, res) {
         const _apiKey = req.apiKey
         const _headers = req.headers
 
+        logger.api('🎯 claude-official Stream headers:', JSON.stringify(_headers, null, 2))
+
+        logger.api('🎯 claude-official Stream body:', JSON.stringify(_requestBody, null, 2))
+
+        logger.api('🎯 claude-official Stream -----:', '--------')
         await claudeRelayService.relayStreamRequestWithUsageCapture(
           _requestBody,
           _apiKey,
@@ -1111,6 +1117,12 @@ async function handleMessagesRequest(req, res) {
 
       if (accountType === 'claude-official') {
         // 官方Claude账号使用原有的转发服务
+
+        logger.info('🎯 claude-official !Stream headers:', JSON.stringify(req.headers, null, 2))
+
+        logger.info('🎯 claude-official !Stream body:', JSON.stringify(req.body, null, 2))
+
+        logger.info('🎯 claude-official !Stream -----:', '--------')
         response = await claudeRelayService.relayRequest(
           _requestBodyNonStream,
           _apiKeyNonStream,
@@ -1439,10 +1451,10 @@ async function handleMessagesRequest(req, res) {
 }
 
 // 🚀 Claude API messages 端点 - /api/v1/messages
-router.post('/v1/messages', authenticateApiKey, handleMessagesRequest)
+router.post('/v1/messages', authenticateApiKey, translateMiddleware, handleMessagesRequest)
 
 // 🚀 Claude API messages 端点 - /claude/v1/messages (别名)
-router.post('/claude/v1/messages', authenticateApiKey, handleMessagesRequest)
+router.post('/claude/v1/messages', authenticateApiKey, translateMiddleware, handleMessagesRequest)
 
 // 📋 模型列表端点 - 支持 Claude, OpenAI, Gemini
 router.get('/v1/models', authenticateApiKey, async (req, res) => {

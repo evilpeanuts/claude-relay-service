@@ -40,6 +40,8 @@ const tabRouteMap = computed(() => {
     apiKeys: '/api-keys',
     accounts: '/accounts',
     quotaCards: '/quota-cards',
+    tutorial: '/tutorial',
+    translationStats: '/translation-stats',
     settings: '/settings'
   }
 
@@ -68,6 +70,8 @@ const initActiveTab = () => {
       ApiKeys: 'apiKeys',
       Accounts: 'accounts',
       QuotaCards: 'quotaCards',
+      Tutorial: 'tutorial',
+      TranslationStats: 'translationStats',
       Settings: 'settings'
     }
     if (routeName && nameToTabMap[routeName]) {
