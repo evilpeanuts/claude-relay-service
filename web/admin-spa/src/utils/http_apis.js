@@ -343,3 +343,33 @@ export const getClaudeCodeVersionApi = () =>
   request({ url: '/admin/claude-code-version', method: 'GET' })
 export const clearClaudeCodeVersionApi = () =>
   request({ url: '/admin/claude-code-version/clear', method: 'POST' })
+
+export const translationstatsrange = (config) =>
+  request({ url: '/admin/translation/stats/range', method: 'GET', ...config })
+
+export const translationAccounts = (account) =>
+  request({ url: '/admin/translation/accounts/' + account, method: 'GET' })
+
+export const translationAccountAdd = (provider, data) =>
+  request({ url: '/admin/translation/accounts/' + provider, method: 'POST', data })
+
+export const translationAccountUpdate = (provider, accountId, data) =>
+  request({ url: '/admin/translation/accounts/' + provider + '/' + accountId, method: 'PUT', data })
+
+export const translationAccountActivate = (provider, accountId) =>
+  request({
+    url: '/admin/translation/accounts/active/' + provider + '/' + accountId,
+    method: 'POST'
+  })
+
+export const translationAccountPatch = (provider, accountId, data) =>
+  request({
+    url: '/admin/translation/accounts/' + provider + '/' + accountId,
+    method: 'PATCH',
+    data
+  })
+export const translationAccountDelete = (provider, accountId) =>
+  request({
+    url: '/admin/translation/accounts/' + provider + '/' + accountId,
+    method: 'delete'
+  })

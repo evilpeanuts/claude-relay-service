@@ -6,8 +6,11 @@ version: '3.8'
 services:
   # 🚀 Claude Relay Service
   claude-relay:
-    build: .
-    image: weishaw/claude-relay-service:latest
+    build:
+      context: .  # Dockerfile 所在目录
+      dockerfile: Dockerfile  # 可选，默认就是 Dockerfile
+    image: claude-relay-service:latest # 自定义镜像名和版本号
+    # image: weishaw/claude-relay-service:latest
     restart: unless-stopped
     ports:
       # 绑定地址：生产环境建议使用反向代理，设置 BIND_HOST=127.0.0.1

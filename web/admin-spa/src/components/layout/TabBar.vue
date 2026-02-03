@@ -70,7 +70,11 @@ const tabs = computed(() => {
     })
   }
 
-  baseTabs.push({ key: 'settings', name: '系统设置', shortName: '设置', icon: 'fas fa-cogs' })
+  baseTabs.push(
+    { key: 'tutorial', name: '使用教程', shortName: '教程', icon: 'fas fa-graduation-cap' },
+    { key: 'translationStats', name: '翻译统计', shortName: '翻译', icon: 'fas fa-language' },
+    { key: 'settings', name: '系统设置', shortName: '设置', icon: 'fas fa-cogs' }
+  )
 
   return baseTabs
 })

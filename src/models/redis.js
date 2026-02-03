@@ -3675,6 +3675,576 @@ class RedisClient {
       }
     }
   }
+
+  /**
+   * 保存翻译日志到有序集合
+   * @param {Object} logEntry - 日志条目
+   * @returns {Promise<boolean>} 是否成功
+   */
+  async saveTranslationLog(logEntry) {
+    if (!config.translation?.logging?.enabled) {
+      return false
+    }
+
+    try {
+      const { id: logId, timestamp } = logEntry
+      const ttl = config.translation.logging.ttl || 2592000 // 默认30天
+
+      // 1. 存储日志详情
+      const logKey = `translation_log:${logId}`
+      await this.client.setex(logKey, ttl, JSON.stringify(logEntry))
+
+      // 2. 添加到有序集合（按时间戳排序）
+      await this.client.zadd('translation_logs', timestamp, logId)
+
+      // 3. 限制日志数量（保留最新的 N 条）
+      const maxLogs = config.translation.logging.maxLogs || 10000
+      await this._limitTranslationLogs(maxLogs)
+
+      return true
+    } catch (error) {
+      logger.error('❌ Failed to save translation log:', error)
+      return false
+    }
+  }
+
+  /**
+   * 获取翻译日志列表
+   * @param {Object} options - 查询选项
+   */
+  async getTranslationLogs(options = {}) {
+    try {
+      const page = Math.max(1, options.page || 1)
+      const pageSize = Math.min(Math.max(1, options.pageSize || 50), 500)
+      const startTime = options.startTime || 0
+      const endTime = options.endTime || Date.now()
+      const { provider } = options
+
+      // 获取时间范围内的日志ID（按时间倒序）
+      const logIds = await this.client.zrevrangebyscore(
+        'translation_logs',
+        endTime,
+        startTime,
+        'LIMIT',
+        (page - 1) * pageSize,
+        pageSize
+      )
+
+      // 获取总数
+      const total = await this.client.zcount('translation_logs', startTime, endTime)
+
+      if (logIds.length === 0) {
+        return {
+          logs: [],
+          total: 0,
+          page,
+          pageSize
+        }
+      }
+
+      // 批量获取日志详情
+      const pipeline = this.client.pipeline()
+      for (const logId of logIds) {
+        pipeline.get(`translation_log:${logId}`)
+      }
+
+      const results = await pipeline.exec()
+
+      // 解析日志数据并应用筛选条件
+      const logs = []
+      for (let i = 0; i < logIds.length; i++) {
+        const [err, logData] = results[i]
+
+        if (err || !logData) {
+          continue
+        }
+
+        try {
+          const logInfo = JSON.parse(logData)
+
+          // 应用筛选条件
+          if (!provider || logInfo.provider === provider) {
+            logs.push(logInfo)
+          }
+        } catch (parseError) {
+          logger.warn(`⚠️ Failed to parse translation log:`, parseError)
+        }
+      }
+
+      return {
+        logs,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize)
+      }
+    } catch (error) {
+      logger.error('❌ Failed to get translation logs:', error)
+      return {
+        logs: [],
+        total: 0,
+        page: 1,
+        pageSize: 50,
+        totalPages: 0
+      }
+    }
+  }
+
+  /**
+   * 搜索翻译日志
+   * @param {Object} options - 搜索选项
+   */
+  async searchTranslationLogs(options = {}) {
+    try {
+      const query = (options.query || '').toLowerCase().trim()
+      const field = options.field || 'all'
+      const page = Math.max(1, options.page || 1)
+      const pageSize = Math.min(Math.max(1, options.pageSize || 50), 100)
+
+      if (!query) {
+        return await this.getTranslationLogs({ page, pageSize })
+      }
+
+      // 获取所有日志ID
+      const logIds = await this.client.zrange('translation_logs', 0, -1)
+
+      if (logIds.length === 0) {
+        return {
+          logs: [],
+          total: 0,
+          page,
+          pageSize,
+          totalPages: 0
+        }
+      }
+
+      // 批量获取日志详情进行搜索
+      const pipeline = this.client.pipeline()
+      for (const logId of logIds) {
+        pipeline.get(`translation_log:${logId}`)
+      }
+
+      const results = await pipeline.exec()
+
+      // 搜索并筛选
+      const matchedLogs = []
+      for (let i = 0; i < logIds.length; i++) {
+        const [err, logData] = results[i]
+
+        if (err || !logData) {
+          continue
+        }
+
+        try {
+          const logInfo = JSON.parse(logData)
+          let matches = false
+
+          switch (field) {
+            case 'all':
+              matches =
+                (logInfo.originalText && logInfo.originalText.toLowerCase().includes(query)) ||
+                (logInfo.translatedText && logInfo.translatedText.toLowerCase().includes(query)) ||
+                (logInfo.provider && logInfo.provider.toLowerCase().includes(query)) ||
+                (logInfo.accountName && logInfo.accountName.toLowerCase().includes(query))
+              break
+
+            case 'text':
+              matches =
+                (logInfo.originalText && logInfo.originalText.toLowerCase().includes(query)) ||
+                (logInfo.translatedText && logInfo.translatedText.toLowerCase().includes(query))
+              break
+
+            case 'provider':
+              matches = logInfo.provider && logInfo.provider.toLowerCase().includes(query)
+              break
+
+            default:
+              matches = false
+          }
+
+          if (matches) {
+            matchedLogs.push(logInfo)
+          }
+        } catch (parseError) {
+          logger.warn(`⚠️ Failed to parse translation log:`, parseError)
+        }
+      }
+
+      // 按时间倒序排序
+      matchedLogs.sort((a, b) => b.timestamp - a.timestamp)
+
+      // 分页
+      const total = matchedLogs.length
+      const startIndex = (page - 1) * pageSize
+      const endIndex = startIndex + pageSize
+      const paginatedLogs = matchedLogs.slice(startIndex, endIndex)
+
+      return {
+        logs: paginatedLogs,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize)
+      }
+    } catch (error) {
+      logger.error('❌ Failed to search translation logs:', error)
+      return {
+        logs: [],
+        total: 0,
+        page: 1,
+        pageSize: 50,
+        totalPages: 0
+      }
+    }
+  }
+
+  /**
+   * 获取单条翻译日志
+   */
+  async getTranslationLog(logId) {
+    try {
+      const logData = await this.client.get(`translation_log:${logId}`)
+      if (!logData) {
+        return null
+      }
+
+      return JSON.parse(logData)
+    } catch (error) {
+      logger.error(`❌ Failed to get translation log ${logId}:`, error)
+      return null
+    }
+  }
+
+  /**
+   * 删除翻译日志
+   */
+  async deleteTranslationLog(logId) {
+    try {
+      const pipeline = this.client.pipeline()
+      pipeline.del(`translation_log:${logId}`)
+      pipeline.zrem('translation_logs', logId)
+      await pipeline.exec()
+      logger.info(`🗑️ Translation log deleted: ${logId}`)
+      return true
+    } catch (error) {
+      logger.error(`❌ Failed to delete translation log ${logId}:`, error)
+      return false
+    }
+  }
+
+  /**
+   * 批量删除翻译日志
+   */
+  async batchDeleteTranslationLogs(logIds) {
+    if (!logIds || logIds.length === 0) {
+      return 0
+    }
+
+    try {
+      const pipeline = this.client.pipeline()
+
+      // 删除所有日志详情
+      for (const logId of logIds) {
+        pipeline.del(`translation_log:${logId}`)
+      }
+
+      // 从有序集合中移除所有ID
+      pipeline.zrem('translation_logs', ...logIds)
+
+      await pipeline.exec()
+      logger.info(`🗑️ Batch deleted ${logIds.length} translation logs`)
+
+      return logIds.length
+    } catch (error) {
+      logger.error('❌ Failed to batch delete translation logs:', error)
+      return 0
+    }
+  }
+
+  /**
+   * 清空所有翻译日志
+   */
+  async clearAllTranslationLogs() {
+    try {
+      // 获取所有日志ID
+      const logIds = await this.client.zrange('translation_logs', 0, -1)
+
+      if (logIds.length === 0) {
+        return 0
+      }
+
+      // 批量删除所有日志详情
+      const pipeline = this.client.pipeline()
+      for (const logId of logIds) {
+        pipeline.del(`translation_log:${logId}`)
+      }
+
+      // 删除有序集合
+      pipeline.del('translation_logs')
+
+      await pipeline.exec()
+
+      logger.info(`🧹 Cleared ${logIds.length} translation logs`)
+      return logIds.length
+    } catch (error) {
+      logger.error('❌ Failed to clear translation logs:', error)
+      return 0
+    }
+  }
+
+  /**
+   * 获取翻译日志统计
+   */
+  async getTranslationLogStats() {
+    try {
+      const logIds = await this.client.zrange('translation_logs', 0, -1)
+
+      if (logIds.length === 0) {
+        return {
+          total: 0,
+          byProvider: {},
+          totalChars: 0,
+          avgCharsPerLog: 0
+        }
+      }
+
+      // 批量获取日志详情
+      const pipeline = this.client.pipeline()
+      for (const logId of logIds) {
+        pipeline.get(`translation_log:${logId}`)
+      }
+
+      const results = await pipeline.exec()
+
+      const stats = {
+        total: logIds.length,
+        byProvider: {},
+        totalChars: 0,
+        avgCharsPerLog: 0
+      }
+
+      for (let i = 0; i < logIds.length; i++) {
+        const [err, logData] = results[i]
+
+        if (err || !logData) {
+          continue
+        }
+
+        try {
+          const logInfo = JSON.parse(logData)
+
+          // 按供应商统计
+          const provider = logInfo.provider || 'unknown'
+          stats.byProvider[provider] = (stats.byProvider[provider] || 0) + 1
+
+          // 总字符数
+          stats.totalChars += logInfo.charCount || 0
+        } catch (parseError) {
+          logger.warn(`⚠️ Failed to parse log for stats:`, parseError)
+        }
+      }
+
+      // 计算平均字符数
+      if (logIds.length > 0) {
+        stats.avgCharsPerLog = Math.round(stats.totalChars / logIds.length)
+      }
+
+      return stats
+    } catch (error) {
+      logger.error('❌ Failed to get translation log stats:', error)
+      return {
+        total: 0,
+        byProvider: {},
+        totalChars: 0,
+        avgCharsPerLog: 0
+      }
+    }
+  }
+
+  /**
+   * 获取今日翻译统计
+   */
+  async getTodayTranslationStats() {
+    try {
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const startOfDay = today.getTime()
+      const endOfDay = startOfDay + 86400000
+
+      // 获取今日的日志ID
+      const logIds = await this.client.zrangebyscore('translation_logs', startOfDay, endOfDay)
+
+      if (logIds.length === 0) {
+        return {
+          total: 0,
+          byProvider: {},
+          totalChars: 0,
+          avgCharsPerLog: 0
+        }
+      }
+
+      // 批量获取日志详情
+      const pipeline = this.client.pipeline()
+      for (const logId of logIds) {
+        pipeline.get(`translation_log:${logId}`)
+      }
+
+      const results = await pipeline.exec()
+
+      const stats = {
+        total: logIds.length,
+        byProvider: {},
+        totalChars: 0,
+        avgCharsPerLog: 0
+      }
+
+      for (let i = 0; i < logIds.length; i++) {
+        const [err, logData] = results[i]
+
+        if (err || !logData) {
+          continue
+        }
+
+        try {
+          const logInfo = JSON.parse(logData)
+
+          // 按供应商统计
+          const provider = logInfo.provider || 'unknown'
+          stats.byProvider[provider] = (stats.byProvider[provider] || 0) + 1
+
+          // 总字符数
+          stats.totalChars += logInfo.charCount || 0
+        } catch (parseError) {
+          logger.warn(`⚠️ Failed to parse log for stats:`, parseError)
+        }
+      }
+
+      // 计算平均字符数
+      if (logIds.length > 0) {
+        stats.avgCharsPerLog = Math.round(stats.totalChars / logIds.length)
+      }
+
+      return stats
+    } catch (error) {
+      logger.error('❌ Failed to get today translation stats:', error)
+      return {
+        total: 0,
+        byProvider: {},
+        totalChars: 0,
+        avgCharsPerLog: 0
+      }
+    }
+  }
+
+  /**
+   * 导出翻译日志
+   */
+  async exportTranslationLogs() {
+    try {
+      // 获取所有日志ID
+      const logIds = await this.client.zrange('translation_logs', 0, -1)
+
+      if (logIds.length === 0) {
+        return []
+      }
+
+      // 批量获取所有日志详情
+      const pipeline = this.client.pipeline()
+      for (const logId of logIds) {
+        pipeline.get(`translation_log:${logId}`)
+      }
+
+      const results = await pipeline.exec()
+      const logs = []
+
+      for (let i = 0; i < logIds.length; i++) {
+        const [err, logData] = results[i]
+
+        if (!err && logData) {
+          try {
+            logs.push(JSON.parse(logData))
+          } catch (parseError) {
+            logger.warn(`⚠️ Failed to parse translation log:`, parseError)
+          }
+        }
+      }
+
+      // 按时间倒序排序
+      logs.sort((a, b) => b.timestamp - a.timestamp)
+
+      return logs
+    } catch (error) {
+      logger.error('❌ Failed to export translation logs:', error)
+      return []
+    }
+  }
+
+  /**
+   * 导入翻译日志
+   */
+  async importTranslationLogs(logs) {
+    if (!Array.isArray(logs) || logs.length === 0) {
+      return 0
+    }
+
+    try {
+      let importedCount = 0
+
+      for (const log of logs) {
+        if (!log.id || !log.timestamp) {
+          continue
+        }
+
+        const logKey = `translation_log:${log.id}`
+        const ttl = config.translation?.logging?.ttl || 2592000
+
+        const pipeline = this.client.pipeline()
+        pipeline.setex(logKey, ttl, JSON.stringify(log))
+        pipeline.zadd('translation_logs', log.timestamp, log.id)
+
+        await pipeline.exec()
+        importedCount++
+      }
+
+      logger.info(`📥 Imported ${importedCount} translation logs`)
+      return importedCount
+    } catch (error) {
+      logger.error('❌ Failed to import translation logs:', error)
+      return 0
+    }
+  }
+
+  // 私有辅助方法
+  /**
+   * 限制翻译日志数量
+   * @private
+   */
+  async _limitTranslationLogs(maxLogs) {
+    try {
+      const currentCount = await this.client.zcard('translation_logs')
+
+      if (currentCount > maxLogs) {
+        // 删除最旧的日志
+        const removeCount = currentCount - maxLogs
+        const oldLogIds = await this.client.zrange('translation_logs', 0, removeCount - 1)
+
+        if (oldLogIds.length > 0) {
+          const pipeline = this.client.pipeline()
+
+          for (const oldLogId of oldLogIds) {
+            pipeline.del(`translation_log:${oldLogId}`)
+          }
+
+          pipeline.zremrangebyrank('translation_logs', 0, removeCount - 1)
+          await pipeline.exec()
+
+          logger.debug(`🧹 Cleaned up ${removeCount} old translation logs`)
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Failed to limit translation logs:', error)
+    }
+  }
 }
 
 const redisClient = new RedisClient()

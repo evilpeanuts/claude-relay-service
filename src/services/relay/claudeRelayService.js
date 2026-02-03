@@ -1602,6 +1602,9 @@ class ClaudeRelayService {
         agent: proxyAgent || getHttpsAgentForNonStream(),
         timeout: config.requestTimeout || 600000
       }
+      logger.api(
+        `🔗 Sending request to Claude API: ${options.method} ${options.path} \n headers: ${JSON.stringify(headers, null, 2)} \n body: ${JSON.stringify(JSON.parse(bodyString), null, 2)}`
+      )
 
       const req = https.request(options, (res) => {
         // 使用数组收集 chunks，避免 O(n²) 的 Buffer.concat
@@ -1647,7 +1650,7 @@ class ClaudeRelayService {
               body: responseBody
             }
 
-            logger.debug(`🔗 Claude API response: ${res.statusCode}`)
+            logger.debug(`🔗 Claude API response : ${res.statusCode} responseBody:${responseBody}`)
 
             resolve(response)
           } catch (error) {
@@ -2020,6 +2023,10 @@ class ClaudeRelayService {
         agent: proxyAgent || getHttpsAgentForStream(),
         timeout: config.requestTimeout || 600000
       }
+
+      logger.api(
+        `🌊 [Stream] Sending request to Claude API: ${options.method} ${options.path} (Account: ${accountId}) \n headers: ${JSON.stringify(headers, null, 2)} \n body: ${JSON.stringify(JSON.parse(bodyString), null, 2)})`
+      )
 
       const req = https.request(options, async (res) => {
         logger.debug(`🌊 Claude stream response status: ${res.statusCode}`)
