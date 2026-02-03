@@ -90,7 +90,7 @@ jobs:
           
           # 将 CustomProduction 分支 rebase 到最新的 main 分支上
           # 这样你的自定义功能会建立在最新的上游代码之上
-          git rebase origin/main || (
+          git rebase upstream/main -X theirs || (
             echo "⚠️ Conflict detected on CustomProduction, skipping."
             git rebase --abort
             exit 0
