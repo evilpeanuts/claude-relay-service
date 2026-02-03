@@ -60,7 +60,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     server: {
-      port: 3001,
+      port: 3003,
       host: true,
       open: true,
       proxy: {
