@@ -28,6 +28,9 @@ const claudeRelayConfigRoutes = require('./claudeRelayConfig')
 const syncRoutes = require('./sync')
 const serviceRatesRoutes = require('./serviceRates')
 const quotaCardsRoutes = require('./quotaCards')
+const translationStatsRoutes = require('./translationStats')
+const translationAccountsRoutes = require('./translationAccounts')
+const translationLogsRoutes = require('./translationLogs')
 
 // 挂载所有子路由
 // 使用完整路径的模块（直接挂载到根路径）
@@ -47,6 +50,8 @@ router.use('/', claudeRelayConfigRoutes)
 router.use('/', syncRoutes)
 router.use('/', serviceRatesRoutes)
 router.use('/', quotaCardsRoutes)
+router.use('/', translationStatsRoutes)
+router.use('/', translationAccountsRoutes)
 
 // 使用相对路径的模块（需要指定基础路径前缀）
 router.use('/account-groups', accountGroupsRoutes)
@@ -54,5 +59,6 @@ router.use('/ccr-accounts', ccrAccountsRoutes)
 router.use('/bedrock-accounts', bedrockAccountsRoutes)
 router.use('/gemini-accounts', geminiAccountsRoutes)
 router.use('/openai-accounts', openaiAccountsRoutes)
+router.use('/translation-logs', translationLogsRoutes)
 
 module.exports = router

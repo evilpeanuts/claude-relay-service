@@ -228,6 +228,42 @@ const config = {
     enabled: process.env.QUOTA_CARD_LIMITS_ENABLED !== 'false', // 默认启用
     maxExpiryDays: parseInt(process.env.QUOTA_CARD_MAX_EXPIRY_DAYS) || 90, // 最大有效期距今天数
     maxTotalCostLimit: parseFloat(process.env.QUOTA_CARD_MAX_TOTAL_COST_LIMIT) || 1000 // 最大总额度（美元）
+  },
+  // 🌍 翻译配置
+  translation: {
+    enabled: process.env.TRANSLATION_ENABLED === 'true', // 默认关闭
+    provider: process.env.TRANSLATION_PROVIDER || 'deepl', // 支持: deepl, niutrans, tencent
+    deepl: {
+      targetLang: process.env.DEEPL_TARGET_LANG || 'EN-US',
+      charLimit: parseInt(process.env.DEEPL_CHAR_LIMIT) || 50000,
+      limitPeriod: process.env.DEEPL_LIMIT_PERIOD || 'day'
+    },
+    niutrans: {
+      sourceLang: process.env.NIUTRANS_SOURCE_LANG || 'zh',
+      targetLang: process.env.NIUTRANS_TARGET_LANG || 'en',
+      charLimit: parseInt(process.env.NIUTRANS_CHAR_LIMIT) || 50000,
+      limitPeriod: process.env.NIUTRANS_LIMIT_PERIOD || 'day',
+      rateLimit: parseInt(process.env.NIUTRANS_RATE_LIMIT) || 10
+    },
+    tencent: {
+      sourceLang: process.env.TENCENT_SOURCE_LANG || 'zh',
+      targetLang: process.env.TENCENT_TARGET_LANG || 'en',
+      charLimit: parseInt(process.env.TENCENT_CHAR_LIMIT) || 50000,
+      limitPeriod: process.env.TENCENT_LIMIT_PERIOD || 'day',
+      rateLimit: parseInt(process.env.TENCENT_RATE_LIMIT) || 5
+    },
+    cache: {
+      enabled: process.env.TRANSLATION_CACHE_ENABLED || true, // 默认启用
+      ttl: parseInt(process.env.TRANSLATION_CACHE_TTL) || 86400 * 365, // Redis缓存过期时间(秒,默认1年)
+      maxMemorySize: parseInt(process.env.TRANSLATION_CACHE_MAX_MEMORY_SIZE) || 100000, // 内存LRU缓存最大条目数
+      minTextLength: parseInt(process.env.TRANSLATION_CACHE_MIN_TEXT_LENGTH) || 1, // 最小缓存文本长度
+      crossProvider: process.env.TRANSLATION_CACHE_CROSS_PROVIDER || true // 跨供应商查找缓存(默认启用)
+    },
+    logging: {
+      enabled: process.env.TRANSLATION_LOGGING_ENABLED === 'true', // 翻译日志存储开关，默认关闭
+      ttl: parseInt(process.env.TRANSLATION_LOGGING_TTL) || 604800, // 日志过期时间(秒,默认7天)
+      maxLogs: parseInt(process.env.TRANSLATION_LOGGING_MAX_LOGS) || 10000 // 最大日志条目数
+    }
   }
 }
 
