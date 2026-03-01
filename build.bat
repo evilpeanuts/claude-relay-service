@@ -58,7 +58,7 @@ ssh -o IdentitiesOnly=yes -i %KEY_PATH% %REMOTE_USER%@%REMOTE_IP% "sh %REMOTE_SC
 
 echo --- Deployment finished successfully! ---
 
-echo 1.1.286>VERSION
+@REM echo 1.1.286>VERSION
 REM 删除旧的 %LOCAL_TAR_PATH%.tar 文件（如果存在）
 if exist "%LOCAL_TAR_PATH%" (
     echo Deleting old %LOCAL_TAR_PATH% file...
