@@ -2,7 +2,7 @@
 
 PASSWORD=YMyxwX8EBmkgRMaR
 REMOTE_USER=root
-REMOTE_IP=38.95.79.52
+REMOTE_IP=38.207.186.173
 REMOTE_TAR_DIR=/root/claude-relay-service-build/
 REMOTE_UPDATE_PATH=/root/claude-relay-service/update-local-image.sh
 LOCAL_TAR_PATH=claude-relay-service.tar
