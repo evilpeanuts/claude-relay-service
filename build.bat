@@ -36,7 +36,7 @@ echo Building Docker image with version: %VERSION%
 
 REM 构建 Docker 镜像
 REM docker build -t %LOCAL_TAR_PATH%:%VERSION% -t %LOCAL_TAR_PATH%:latest .
-docker build --no-cache -t %LOCAL_TAR_PATH%:latest . 
+docker build --no-cache -t %SERVICE_NAME%:latest . 
 echo Build complete: %LOCAL_TAR_PATH%:%VERSION%
 docker save -o %LOCAL_TAR_PATH% %SERVICE_NAME%:latest
 
