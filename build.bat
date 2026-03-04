@@ -6,7 +6,7 @@ setlocal enabledelayedexpansion
 set KEY_PATH=C:\Users\Zenos\.ssh\nube_id_rsa
 set SERVICE_NAME=claude-relay-service
 set REMOTE_USER=root
-set REMOTE_IP=38.207.186.173
+set REMOTE_IP=38.95.79.52
 set REMOTE_SCRIPT_PATH=/root/%SERVICE_NAME%/update-local-image.sh
 set REMOTE_TAR_DIR=/root/%SERVICE_NAME%-build/
 set LOCAL_TAR_PATH=%SERVICE_NAME%.tar
@@ -38,7 +38,7 @@ REM 构建 Docker 镜像
 REM docker build -t %LOCAL_TAR_PATH%:%VERSION% -t %LOCAL_TAR_PATH%:latest .
 docker build --no-cache -t %LOCAL_TAR_PATH%:latest . 
 echo Build complete: %LOCAL_TAR_PATH%:%VERSION%
-docker save -o %LOCAL_TAR_PATH% %LOCAL_TAR_PATH%:latest
+docker save -o %LOCAL_TAR_PATH% %SERVICE_NAME%:latest
 
 echo 开始执行2S等待...
 timeout /t 2 /nobreak > nul
@@ -51,8 +51,6 @@ docker image prune -f
 echo --- Step 1: Uploading %LOCAL_TAR_PATH% to server ---
 ssh -o IdentitiesOnly=yes -i %KEY_PATH% %REMOTE_USER%@%REMOTE_IP% "rm -f %REMOTE_TAR_DIR%%LOCAL_TAR_PATH%"
 scp -o IdentitiesOnly=yes -i %KEY_PATH% %LOCAL_TAR_PATH% %REMOTE_USER%@%REMOTE_IP%:%REMOTE_TAR_DIR%
-ssh -o IdentitiesOnly=yes -i %KEY_PATH% %REMOTE_USER%@%REMOTE_IP% "rm -f %REMOTE_TAR_DIR%%LOCAL_TAR_PATH%"
-
 echo --- Step 2: Running remote update script ---
 ssh -o IdentitiesOnly=yes -i %KEY_PATH% %REMOTE_USER%@%REMOTE_IP% "sh %REMOTE_SCRIPT_PATH%"
 
