@@ -76,6 +76,40 @@ jobs:
           # --force-with-lease：安全的强制推送
           git push origin main --force-with-lease
 
+      # ========== 步骤 5.5：同步最新的 50 条 tags ==========
+      - name: 🏷️ Sync latest 50 tags from upstream
+        if: ${{ success() }}
+        run: |
+          # 输出提示信息
+          echo "Syncing latest 50 tags from upstream..."
+
+          # 从上游获取所有 tags
+          git fetch upstream --tags
+
+          # 获取最新的 50 条 tags（按创建时间倒序）
+          latest_tags=$(git tag --sort=-creatordate | head -n 50)
+
+          # 检查是否有 tags
+          if [ -z "$latest_tags" ]; then
+            echo "ℹ️ No tags found in upstream repository"
+            exit 0
+          fi
+
+          # 输出找到的 tags 数量
+          tag_count=$(echo "$latest_tags" | wc -l)
+          echo "📌 Found $tag_count tags to sync"
+
+          # 推送这些 tags 到 origin（强制覆盖）
+          # 使用 --force 是因为上游可能会修改已存在的 tag
+          echo "$latest_tags" | while read -r tag; do
+            if [ -n "$tag" ]; then
+              echo "  Pushing tag: $tag"
+              git push origin "$tag" --force || echo "  ⚠️ Failed to push tag: $tag"
+            fi
+          done
+
+          echo "✅ Tags sync completed"
+
       # ========== 步骤 6：更新你的 CustomProduction 开发分支 ==========
       - name: 🧬 Update CustomProduction branch from main
         # 只有当前面所有步骤都成功时才执行
