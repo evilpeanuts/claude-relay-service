@@ -80,33 +80,69 @@ jobs:
       - name: 🏷️ Sync latest 50 tags from upstream
         if: ${{ success() }}
         run: |
-          # 输出提示信息
           echo "Syncing latest 50 tags from upstream..."
 
-          # 从上游获取所有 tags
+          TAG_COUNT=50
+          ORIGIN=origin
+
+          # 退出时自动清理临时文件
+          cleanup() {
+            rm -f upstream_tags_all.txt upstream_latest_tags.txt origin_tags_raw.txt origin_tags.txt
+          }
+          trap cleanup EXIT
+
+          # --- 1. 从上游获取所有 tags ---
           git fetch upstream --tags
 
-          # 获取最新的 50 条 tags（按创建时间倒序）
-          latest_tags=$(git tag --sort=-creatordate | head -n 50)
+          # --- 2. 取最新的 $TAG_COUNT 条 tags（按创建时间倒序）---
+          git tag -l --sort=-creatordate > upstream_tags_all.txt
+          head -n "$TAG_COUNT" upstream_tags_all.txt > upstream_latest_tags.txt
 
-          # 检查是否有 tags
-          if [ -z "$latest_tags" ]; then
+          if [ ! -s upstream_latest_tags.txt ]; then
             echo "ℹ️ No tags found in upstream repository"
             exit 0
           fi
 
-          # 输出找到的 tags 数量
-          tag_count=$(echo "$latest_tags" | wc -l)
+          tag_count=$(wc -l < upstream_latest_tags.txt)
           echo "📌 Found $tag_count tags to sync"
 
-          # 推送这些 tags 到 origin（强制覆盖）
-          # 使用 --force 是因为上游可能会修改已存在的 tag
-          echo "$latest_tags" | while read -r tag; do
-            if [ -n "$tag" ]; then
-              echo "  Pushing tag: $tag"
-              git push origin "$tag" --force || echo "  ⚠️ Failed to push tag: $tag"
+          # --- 3. 本地缺失的 tag 从 upstream 补全 ---
+          echo "--- Fetching missing tags locally ---"
+          while IFS= read -r tag; do
+            if git show-ref --tags --quiet "refs/tags/$tag"; then
+              echo "  Skip existing local tag: $tag"
+            else
+              echo "  Fetch missing tag: $tag"
+              git fetch upstream "refs/tags/$tag:refs/tags/$tag"
             fi
-          done
+          done < upstream_latest_tags.txt
+
+          # --- 4. 获取 origin 当前已有的 tags ---
+          echo "--- Getting origin tags ---"
+          git ls-remote --tags "$ORIGIN" > origin_tags_raw.txt
+          awk -F'/' '{print $NF}' origin_tags_raw.txt | grep -v '\^{}' > origin_tags.txt
+
+          # --- 5. 推送 origin 缺少的 tag（按需推送，不强制覆盖）---
+          echo "--- Pushing missing tags to origin ---"
+          while IFS= read -r tag; do
+            if grep -qxF "$tag" origin_tags.txt; then
+              echo "  Tag already exists on origin: $tag"
+            else
+              echo "  Pushing tag: $tag"
+              git push "$ORIGIN" "refs/tags/$tag" || echo "  ⚠️ Failed to push tag: $tag"
+            fi
+          done < upstream_latest_tags.txt
+
+          # --- 6. 删除 origin 上不在最新 $TAG_COUNT 条中的旧 tag ---
+          echo "--- Deleting old tags from origin ---"
+          while IFS= read -r tag; do
+            if grep -qxF "$tag" upstream_latest_tags.txt; then
+              : # 在最新列表中，跳过
+            else
+              echo "  Delete old tag from origin: $tag"
+              git push "$ORIGIN" ":refs/tags/$tag" || echo "  ⚠️ Failed to delete tag: $tag"
+            fi
+          done < origin_tags.txt
 
           echo "✅ Tags sync completed"
 
