@@ -232,7 +232,6 @@ const config = {
   // 🌍 翻译配置
   translation: {
     enabled: process.env.TRANSLATION_ENABLED === 'true', // 默认关闭
-    provider: process.env.TRANSLATION_PROVIDER || 'deepl', // 支持: deepl, niutrans, tencent
     deepl: {
       targetLang: process.env.DEEPL_TARGET_LANG || 'EN-US',
       charLimit: parseInt(process.env.DEEPL_CHAR_LIMIT) || 50000,
