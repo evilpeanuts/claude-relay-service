@@ -379,3 +379,6 @@ export const translationAccountDelete = (provider, accountId) =>
     url: '/admin/translation/accounts/' + provider + '/' + accountId,
     method: 'delete'
   })
+
+export const translationCacheClear = () =>
+  request({ url: '/admin/translation/cache', method: 'delete' })

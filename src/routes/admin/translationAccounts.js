@@ -5,6 +5,7 @@ const redis = require('../../models/redis')
 const crypto = require('crypto')
 const config = require('../../../config/config')
 const logger = require('../../../src/utils/logger')
+const { clearCache } = require('../../services/translationCacheService')
 
 // 状态常量
 const STATUS_NORMAL = 1 // 正常
@@ -452,6 +453,37 @@ router.delete('/translation/accounts/:provider/:accountId', async (req, res) => 
     res.json({ success: true })
   } catch (error) {
     res.status(500).json({ error: error.message })
+  }
+})
+
+// 清除翻译缓存、日志、统计、配额（保留账户数据）
+router.delete('/translation/cache', async (req, res) => {
+  try {
+    await clearCache()
+
+    const extraPatterns = ['translation_log:*', 'translation_quota:*', 'translation_stats:*']
+    let totalDeleted = 0
+    for (const pattern of extraPatterns) {
+      const keys = await redis.keys(pattern)
+      if (keys.length > 0) {
+        await redis.del(...keys)
+        totalDeleted += keys.length
+      }
+    }
+
+    // 清除翻译日志的 ZSET 索引（translation_logs 不匹配 translation_log:* 通配符）
+    const zsetDeleted = await redis.del('translation_logs')
+    if (zsetDeleted > 0) {
+      totalDeleted += zsetDeleted
+    }
+    if (totalDeleted > 0) {
+      logger.info(`Cleared ${totalDeleted} translation log/quota/stats entries`)
+    }
+
+    res.json({ success: true, message: 'Translation cache cleared' })
+  } catch (error) {
+    logger.error('Clear translation cache error:', error)
+    res.status(500).json({ success: false, error: error.message })
   }
 })
 

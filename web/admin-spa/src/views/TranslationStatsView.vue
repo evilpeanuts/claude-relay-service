@@ -13,6 +13,23 @@
           <p class="mt-0.5 text-sm text-gray-600 dark:text-gray-400">查看翻译服务使用情况</p>
         </div>
       </div>
+      <div class="ml-auto">
+        <button
+          class="action-btn action-btn-delete flex items-center gap-1.5 px-3 py-1.5 text-sm"
+          :disabled="clearingCache"
+          @click="clearTranslationCache"
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+            />
+          </svg>
+          {{ clearingCache ? '清除中...' : '清除翻译缓存' }}
+        </button>
+      </div>
     </div>
 
     <!-- Filters with Element Plus -->
@@ -593,6 +610,7 @@ const startDate = ref(new Date(Date.now() - 7 * 86400000).toISOString().split('T
 const endDate = ref(new Date().toISOString().split('T')[0])
 const selectedProvider = ref('')
 const loading = ref(false)
+const clearingCache = ref(false)
 const showModal = ref(false)
 const editingAccount = ref(null)
 const currentProvider = ref('')
@@ -811,6 +829,19 @@ const deleteAccount = async (provider, accountId) => {
   }
 }
 
+const clearTranslationCache = async () => {
+  if (!confirm('确认清除翻译缓存、日志、统计及配额数据？翻译账户数据不受影响。')) return
+  clearingCache.value = true
+  try {
+    await httpApis.translationCacheClear()
+    alert('翻译缓存已清除')
+  } catch (error) {
+    alert(`清除失败: ${error.response?.data?.error || error.message}`)
+  } finally {
+    clearingCache.value = false
+  }
+}
+
 // 页面加载时获取统计数据
 loadStats()
 </script>
@@ -830,6 +861,10 @@ loadStats()
 
 .header {
   margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .glass-card {
