@@ -36,12 +36,21 @@ class LRUCache {
 
 const memoryCache = new LRUCache(config.translation.cache.maxMemorySize)
 
-function generateCacheKey(text, provider, sourceLang, targetLang) {
+function generateCacheKey(text, provider) {
   const hash = crypto.createHash('md5').update(text).digest('hex')
-  return `translate:${provider}:${sourceLang}:${targetLang}:${hash}`
+  return `translate:${provider}:${hash}`
 }
 
-async function getCachedTranslation(text, provider, sourceLang, targetLang) {
+function parseValue(raw) {
+  try {
+    const obj = JSON.parse(raw)
+    return obj.translated ?? raw
+  } catch {
+    return raw
+  }
+}
+
+async function getCachedTranslation(text, provider) {
   if (!config.translation.cache.enabled) {
     return null
   }
@@ -49,13 +58,13 @@ async function getCachedTranslation(text, provider, sourceLang, targetLang) {
     return null
   }
 
-  const cacheKey = generateCacheKey(text, provider, sourceLang, targetLang)
+  const cacheKey = generateCacheKey(text, provider)
 
   // 1. 检查当前供应商的内存缓存
   const memCached = memoryCache.get(cacheKey)
   if (memCached) {
     logger.debug(`Translation cache hit (memory): ${cacheKey}`)
-    return memCached
+    return parseValue(memCached)
   }
 
   // 2. 检查当前供应商的 Redis 缓存
@@ -64,7 +73,7 @@ async function getCachedTranslation(text, provider, sourceLang, targetLang) {
     if (redisCached) {
       logger.debug(`Translation cache hit (redis): ${cacheKey}`)
       memoryCache.set(cacheKey, redisCached)
-      return redisCached
+      return parseValue(redisCached)
     }
   } catch (error) {
     logger.error('Redis cache read error:', error)
@@ -78,14 +87,14 @@ async function getCachedTranslation(text, provider, sourceLang, targetLang) {
         continue
       }
 
-      const fallbackKey = generateCacheKey(text, otherProvider, sourceLang, targetLang)
+      const fallbackKey = generateCacheKey(text, otherProvider)
       try {
         const fallbackCached = await redis.get(fallbackKey)
         if (fallbackCached) {
           logger.debug(`Translation cache hit (cross-provider): ${otherProvider} -> ${provider}`)
           // 直接返回，不复制（节省存储空间）
           memoryCache.set(cacheKey, fallbackCached) // 只缓存到内存
-          return fallbackCached
+          return parseValue(fallbackCached)
         }
       } catch (error) {
         logger.error('Cross-provider cache read error:', error)
@@ -104,12 +113,19 @@ async function setCachedTranslation(text, translatedText, provider, sourceLang, 
     return
   }
 
-  const cacheKey = generateCacheKey(text, provider, sourceLang, targetLang)
+  const cacheKey = generateCacheKey(text, provider)
+  const value = JSON.stringify({
+    original: text,
+    translated: translatedText,
+    provider,
+    sourceLang,
+    targetLang
+  })
 
-  memoryCache.set(cacheKey, translatedText)
+  memoryCache.set(cacheKey, value)
 
   try {
-    await redis.setex(cacheKey, config.translation.cache.ttl, translatedText)
+    await redis.setex(cacheKey, config.translation.cache.ttl, value)
     logger.debug(`Translation cached: ${cacheKey}`)
   } catch (error) {
     logger.error('Redis cache write error:', error)
