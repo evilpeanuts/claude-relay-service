@@ -92,7 +92,7 @@ jobs:
           trap cleanup EXIT
 
           # --- 1. 从上游获取所有 tags ---
-          git fetch upstream --tags
+          git fetch upstream --tags --force
 
           # --- 2. 取最新的 $TAG_COUNT 条 tags（按创建时间倒序）---
           git tag -l --sort=-creatordate > upstream_tags_all.txt
@@ -113,7 +113,7 @@ jobs:
               echo "  Skip existing local tag: $tag"
             else
               echo "  Fetch missing tag: $tag"
-              git fetch upstream "refs/tags/$tag:refs/tags/$tag"
+              git fetch upstream "refs/tags/$tag:refs/tags/$tag" --force
             fi
           done < upstream_latest_tags.txt
 
