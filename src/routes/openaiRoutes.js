@@ -274,6 +274,7 @@ const handleResponses = async (req, res) => {
       requestedModel = 'gpt-5'
       req.body.model = 'gpt-5' // 同时更新请求体中的模型
     }
+    logger.info(`📝 Model ${requestedModel}  req.body.model : ${req.body.model}`)
 
     const isStream = req.body?.stream !== false // 默认为流式（兼容现有行为）
 
