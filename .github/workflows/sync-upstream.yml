@@ -118,10 +118,25 @@ jobs:
           done < upstream_latest_tags.txt
 
           # --- 4. 获取 origin 当前已有的 tags ---
-          echo "--- Getting origin tags ---"
+          # 获取远程标签并存入临时文件
           git ls-remote --tags "$ORIGIN" > origin_tags_raw.txt
-          awk -F'/' '{print $NF}' origin_tags_raw.txt | grep -v '\^{}' > origin_tags.txt
+          
+          # 检查文件是否为空（-s 表示文件存在且大小大于0）
+          if [ ! -s origin_tags_raw.txt ]; then
+            echo "⚠️  提醒：在远程仓库 $ORIGIN 中未发现任何 Tags。"
+            echo "终止同步操作。"
+            exit 0  # 正常退出，不标记为报错
+          fi
 
+          # 如果不为空，则继续处理
+          awk -F'/' '{print $NF}' origin_tags_raw.txt | grep -v '\^{}' > origin_tags.txt || true
+          
+          # 再次检查处理后的标签文件是否为空
+          if [ ! -s origin_tags.txt ]; then
+            echo "⚠️  提醒：过滤后没有有效的标签。已退出。"
+            exit 0
+          fi
+          echo "✅ 成功获取标签，继续后续流程..."
           # --- 5. 推送 origin 缺少的 tag（按需推送，不强制覆盖）---
           echo "--- Pushing missing tags to origin ---"
           while IFS= read -r tag; do
