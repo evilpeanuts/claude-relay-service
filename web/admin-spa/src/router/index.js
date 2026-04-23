@@ -18,6 +18,7 @@ const SettingsView = () => import('@/views/SettingsView.vue')
 const ApiStatsView = () => import('@/views/ApiStatsView.vue')
 const QuotaCardsView = () => import('@/views/QuotaCardsView.vue')
 const TranslationStatsView = () => import('@/views/TranslationStatsView.vue')
+const RequestDetailsView = () => import('@/views/RequestDetailsView.vue')
 
 const routes = [
   {

@@ -298,6 +298,8 @@ const handleResponses = async (req, res) => {
   let account = null
   let proxy = null
   let accessToken = null
+  // eslint-disable-next-line prefer-const
+  let schedulerModel = null // 用于错误日志
 
   try {
     // 从中间件获取 API Key 数据
@@ -388,6 +390,9 @@ const handleResponses = async (req, res) => {
     logger.info(`📝 Model ${requestedModel}  req.body.model : ${req.body.model}`)
 
     const isStream = req.body?.stream !== false // 默认为流式（兼容现有行为）
+
+    // 使用规范化后的模型用于调度器选择账户
+    schedulerModel = req.body?.model || requestedModel
 
     if (schedulerModel !== requestedModel) {
       logger.info(
@@ -564,6 +569,65 @@ const handleResponses = async (req, res) => {
       }
 
       return
+    } else if (upstream.status === 400) {
+      logger.warn(`⚠️ Bad request detected for OpenAI account ${accountId} (Codex API)`)
+
+      let errorData = null
+
+      try {
+        if (isStream && upstream.data && typeof upstream.data.on === 'function') {
+          const chunks = []
+          await new Promise((resolve, reject) => {
+            upstream.data.on('data', (chunk) => chunks.push(chunk))
+            upstream.data.on('end', resolve)
+            upstream.data.on('error', reject)
+            setTimeout(resolve, 5000)
+          })
+
+          const fullResponse = Buffer.concat(chunks).toString()
+          try {
+            errorData = JSON.parse(fullResponse)
+          } catch (parseError) {
+            logger.error('Failed to parse 400 error response:', parseError)
+            logger.debug('Raw 400 response:', fullResponse)
+            errorData = { error: { message: fullResponse || 'Bad Request' } }
+          }
+        } else {
+          errorData = upstream.data
+        }
+      } catch (parseError) {
+        logger.error('⚠️ Failed to handle 400 error response:', parseError)
+      }
+
+      let errorResponse = errorData
+      if (!errorResponse || typeof errorResponse !== 'object' || Buffer.isBuffer(errorResponse)) {
+        const fallbackMessage =
+          typeof errorData === 'string' && errorData.trim() ? errorData.trim() : 'Bad Request'
+        errorResponse = {
+          error: {
+            message: `ChatGPT 官方报错: ${getSafeMessage(fallbackMessage)}`,
+            type: 'invalid_request_error',
+            code: 'bad_request'
+          }
+        }
+      } else if (errorResponse.error?.message) {
+        errorResponse.error.message = `ChatGPT 官方报错: ${getSafeMessage(errorResponse.error.message)}`
+      } else if (typeof errorResponse.message === 'string') {
+        errorResponse.message = `ChatGPT 官方报错: ${getSafeMessage(errorResponse.message)}`
+      }
+
+      if (isStream) {
+        res.status(400)
+        res.setHeader('Content-Type', 'text/event-stream')
+        res.setHeader('Cache-Control', 'no-cache')
+        res.setHeader('Connection', 'keep-alive')
+        res.write(`data: ${JSON.stringify(errorResponse)}\n`)
+        res.end()
+      } else {
+        res.status(400).json(errorResponse)
+      }
+
+      return
     } else if (upstream.status === 401 || upstream.status === 402) {
       const unauthorizedStatus = upstream.status
       const statusDescription = unauthorizedStatus === 401 ? 'Unauthorized' : 'Payment required'
@@ -635,11 +699,15 @@ const handleResponses = async (req, res) => {
           typeof errorData === 'string' && errorData.trim() ? errorData.trim() : 'Unauthorized'
         errorResponse = {
           error: {
-            message: fallbackMessage,
+            message: `ChatGPT 官方报错: ${fallbackMessage}`,
             type: 'unauthorized',
             code: 'unauthorized'
           }
         }
+      } else if (errorResponse.error?.message) {
+        errorResponse.error.message = `ChatGPT 官方报错: ${errorResponse.error.message}`
+      } else if (typeof errorResponse.message === 'string') {
+        errorResponse.message = `ChatGPT 官方报错: ${errorResponse.message}`
       }
 
       res.status(unauthorizedStatus).json(errorResponse)
@@ -959,15 +1027,15 @@ const handleResponses = async (req, res) => {
 
     let responsePayload = error.response?.data
     if (!responsePayload) {
-      responsePayload = { error: { message: getSafeMessage(error) } }
+      responsePayload = { error: { message: `官方报错: ${getSafeMessage(error)}` } }
     } else if (typeof responsePayload === 'string') {
-      responsePayload = { error: { message: getSafeMessage(responsePayload) } }
+      responsePayload = { error: { message: `官方报错: ${getSafeMessage(responsePayload)}` } }
     } else if (typeof responsePayload === 'object' && !responsePayload.error) {
       responsePayload = {
-        error: { message: getSafeMessage(responsePayload.message || error) }
+        error: { message: `官方报错: ${getSafeMessage(responsePayload.message || error)}` }
       }
     } else if (responsePayload.error?.message) {
-      responsePayload.error.message = getSafeMessage(responsePayload.error.message)
+      responsePayload.error.message = `官方报错: ${getSafeMessage(responsePayload.error.message)}`
     }
 
     if (!res.headersSent) {
