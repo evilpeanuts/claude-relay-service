@@ -374,8 +374,19 @@ const handleResponses = async (req, res) => {
 
     sessionHash = sessionId ? crypto.createHash('sha256').update(sessionId).digest('hex') : null
 
-    const requestedModel = req.body?.model || null
-    const schedulerModel = getCodexCompatibleModel(requestedModel)
+    // 从请求体中提取模型和流式标志
+    let requestedModel = req.body?.model || null
+    const isCodexModel =
+      typeof requestedModel === 'string' && requestedModel.toLowerCase().includes('codex')
+
+    // 如果模型是 gpt-5 开头且后面还有内容（如 gpt-5-2025-08-07），并且不是 Codex 系列，则覆盖为 gpt-5
+    if (requestedModel && requestedModel.startsWith('gpt-5-') && !isCodexModel) {
+      logger.info(`📝 Model ${requestedModel} detected, normalizing to gpt-5 for Codex API`)
+      requestedModel = 'gpt-5'
+      req.body.model = 'gpt-5' // 同时更新请求体中的模型
+    }
+    logger.info(`📝 Model ${requestedModel}  req.body.model : ${req.body.model}`)
+
     const isStream = req.body?.stream !== false // 默认为流式（兼容现有行为）
 
     if (schedulerModel !== requestedModel) {

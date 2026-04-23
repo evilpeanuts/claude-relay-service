@@ -12,6 +12,7 @@ const { CODEX_CLI_INSTRUCTIONS } = require('./openaiRoutes')
 const apiKeyService = require('../services/apiKeyService')
 const GeminiToOpenAIConverter = require('../services/geminiToOpenAI')
 const CodexToOpenAIConverter = require('../services/codexToOpenAI')
+const { translateMiddleware } = require('../middleware/translateMiddleware')
 
 const router = express.Router()
 
@@ -62,6 +63,11 @@ async function routeToBackend(req, res, requestedModel) {
         }
       })
     }
+    // 对 Claude 模型应用翻译（translateMiddleware 是 async fn，可直接 await）
+    await translateMiddleware(req, res, () => {})
+    if (res.headersSent) {
+      return
+    } // 翻译出错，响应已发出
     await handleChatCompletion(req, res, req.apiKey)
   } else if (backend === 'openai') {
     // OpenAI 后端

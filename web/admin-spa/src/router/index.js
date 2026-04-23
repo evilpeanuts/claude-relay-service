@@ -17,7 +17,7 @@ const AccountUsageRecordsView = () => import('@/views/AccountUsageRecordsView.vu
 const SettingsView = () => import('@/views/SettingsView.vue')
 const ApiStatsView = () => import('@/views/ApiStatsView.vue')
 const QuotaCardsView = () => import('@/views/QuotaCardsView.vue')
-const RequestDetailsView = () => import('@/views/RequestDetailsView.vue')
+const TranslationStatsView = () => import('@/views/TranslationStatsView.vue')
 
 const routes = [
   {
@@ -133,6 +133,18 @@ const routes = [
         path: '',
         name: 'Settings',
         component: SettingsView
+      }
+    ]
+  },
+  {
+    path: '/translation-stats',
+    component: MainLayout,
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'TranslationStats',
+        component: TranslationStatsView
       }
     ]
   },
